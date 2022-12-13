@@ -867,16 +867,21 @@ def main():
 
     set_node_socket_path_env_var()
 
-    tag_no1 = str(vars(args)["node_tag_no1"]).strip()
-    tag_no2 = str(vars(args)["node_tag_no2"]).strip()
-    hydra_eval_no1 = str(vars(args)["hydra_eval_no1"]).strip()
-    hydra_eval_no2 = str(vars(args)["hydra_eval_no2"]).strip()
+    node_rev1 = str(vars(args)["node_rev1"]).strip()
+    node_rev2 = str(vars(args)["node_rev2"]).strip()
+    tag_no1 = str(vars(args)["tag_no1"]).strip()
+    tag_no2 = str(vars(args)["tag_no2"]).strip()
+    node_build_mode = str(vars(args)["build_mode"]).strip()
+    node_rev = str(vars(args)["node_rev"]).strip()
+    node_topology_type1 = str(vars(args)["node_topology1"]).strip()
+    node_topology_type2 = str(vars(args)["node_topology2"]).strip()
     node_start_arguments1 = vars(args)["node_start_arguments1"]
     node_start_arguments2 = vars(args)["node_start_arguments2"]
-    print(f"node_tag_no1: {tag_no1}")
-    print(f"node_tag_no2: {tag_no2}")
-    print(f"hydra_eval_no1: {hydra_eval_no1}")
-    print(f"hydra_eval_no2: {hydra_eval_no2}")
+    print(f"node_rev1: {node_rev1}")
+    print(f"node_rev1: {node_rev2}")
+    print(f"node_build_mode: {node_build_mode}")
+    print(f"node_topology_type1: {node_topology_type1}")
+    print(f"node_topology_type2: {node_topology_type2}")
     print(f"node_start_arguments1: {node_start_arguments1}")
     print(f"node_start_arguments2: {node_start_arguments2}")
 
@@ -1050,21 +1055,32 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cardano Node sync test\n\n")
 
+    # TO DO
+    # to add option for anything else than a node tag - PR/branch/commit?
     parser.add_argument(
-        "-t1", "--node_tag_no1", help="node tag number1 - used for initial sync, from clean state"
-    )
-    parser.add_argument(
-        "-t2", "--node_tag_no2", help="node tag number2 - used for final sync, from existing state"
-    )
-    parser.add_argument(
-        "-e1", "--hydra_eval_no1", help="hydra_eval_no1 - used for initial sync, from clean state"
-    )
-    parser.add_argument(
-        "-e2", "--hydra_eval_no2", help="hydra_eval_no2 - used for final sync, from existing state"
+        "-b", "--build_mode", help="how to get the node files - nix, cabal, prebuilt"
     )
     parser.add_argument(
         "-e", "--environment",
-        help="the environment on which to run the tests - shelley-qa, testnet, staging, mainnet, preview, preprod",
+        help="the environment on which to run the sync test - shelley-qa, preview, preprod, mainnet",
+    )
+    parser.add_argument(
+        "-r1", "--node_rev1", help="desired cardano-node revision - cardano-node tag or branch (used for initial sync, from clean state)",
+    )
+    parser.add_argument(
+        "-r2", "--node_rev2", help="desired cardano-node revision - cardano-node tag or branch (used for final sync, from existing state)",
+    )
+    parser.add_argument(
+        "-t1", "--tag_no1", help="tag_no1 label as it will be shown in the db/visuals",
+    )
+    parser.add_argument(
+        "-t2", "--tag_no2", help="tag_no2 label as it will be shown in the db/visuals",
+    )
+    parser.add_argument(
+        "-n1", "--node_topology1", help="type of node topology used for the initial sync - legacy, p2p"
+    )
+    parser.add_argument(
+        "-n2", "--node_topology2", help="type of node topology used for final sync (after restart) - legacy, p2p"
     )
     parser.add_argument(
         "-a1", "--node_start_arguments1", nargs='+', type=str,
