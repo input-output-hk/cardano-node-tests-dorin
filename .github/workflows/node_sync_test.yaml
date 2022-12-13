@@ -21,6 +21,10 @@ on:
         description: desired cardano-node revision (used for initial sync) - cardano-node tag or branch
         required: true
         default: "None"
+      node_topology1:
+        description: desired cardano-node topology type (used for initial sync) - legacy, p2p
+        required: true
+        default: "legacy"
       node_start_arguments1:
         description: extra arguments to be used when starting the node using tag_no1 (--a1 --a2 21)
         required: false
@@ -33,6 +37,10 @@ on:
         description: desired cardano-node revision (used for final sync) - cardano-node tag or branch
         required: true
         default: "None"
+      node_topology2:
+        description: desired cardano-node topology type (used for final sync) - legacy, p2p
+        required: true
+        default: "legacy"
       node_start_arguments2:
         description: extra arguments to be used when starting the node using tag_no2 (--a1 --a2 21)
         required: false
