@@ -396,7 +396,6 @@ def get_epoch_no_d_zero():
 
 def get_start_slot_no_d_zero():
     env = vars(args)["environment"]
-
     if env == "mainnet":
         return 25661009
     elif env == "testnet":
@@ -852,6 +851,10 @@ def get_data_from_logs(log_file):
     return logs_details_dict
 
 
+def get_node_files_using_nix(node_rev):
+    subprocess.check_call("./build_node_nix.sh %s" % (str(node_rev)), shell=True)
+
+
 def main():
     start_test_time = get_current_date_time()
     print(f"Start test time:            {start_test_time}")
@@ -862,8 +865,10 @@ def main():
 
     set_repo_paths()
 
+    print("===================================================================================")
+    print(f"Test arguments")
     env = vars(args)["environment"]
-    print(f"env: {env}")
+    print(f"- env: {env}")
 
     set_node_socket_path_env_var()
 
@@ -872,47 +877,48 @@ def main():
     tag_no1 = str(vars(args)["tag_no1"]).strip()
     tag_no2 = str(vars(args)["tag_no2"]).strip()
     node_build_mode = str(vars(args)["build_mode"]).strip()
-    node_rev = str(vars(args)["node_rev"]).strip()
     node_topology_type1 = str(vars(args)["node_topology1"]).strip()
     node_topology_type2 = str(vars(args)["node_topology2"]).strip()
     node_start_arguments1 = vars(args)["node_start_arguments1"]
     node_start_arguments2 = vars(args)["node_start_arguments2"]
-    print(f"node_rev1: {node_rev1}")
-    print(f"node_rev1: {node_rev2}")
-    print(f"node_build_mode: {node_build_mode}")
-    print(f"node_topology_type1: {node_topology_type1}")
-    print(f"node_topology_type2: {node_topology_type2}")
-    print(f"node_start_arguments1: {node_start_arguments1}")
-    print(f"node_start_arguments2: {node_start_arguments2}")
+    print(f"- node_build_mode: {node_build_mode}")
+    print(f"- tag_no1: {tag_no1}")
+    print(f"- tag_no1: {tag_no2}")
+    print(f"- node_rev1: {node_rev1}")
+    print(f"- node_rev2: {node_rev2}")
+    print(f"- node_topology_type1: {node_topology_type1}")
+    print(f"- node_topology_type2: {node_topology_type2}")
+    print(f"- node_start_arguments1: {node_start_arguments1}")
+    print(f"- node_start_arguments2: {node_start_arguments2}")
 
     platform_system, platform_release, platform_version = get_os_type()
-    print(f"platform: {platform_system, platform_release, platform_version}")
+    print(f"- platform: {platform_system, platform_release, platform_version}")
+    print("===================================================================================")
 
     if "windows" in platform_system.lower():
         NODE = "cardano-node.exe"
         CLI = "cardano-cli.exe"
 
-    get_node_config_files_time = get_current_date_time()
-    print(f"Get node config files time: {get_node_config_files_time}")
-    print("get the node config files")
+    print("Getting the node configuration files")
     get_node_config_files(env)
 
-    print("Enable the desired cardano node tracers")
+    print("Enabling the desired cardano node tracers")
     if env == "mainnet":
         print("  - Enable 'cardano node resource' monitoring")
         enable_cardano_node_resources_monitoring("config.json")
 
     enable_cardano_node_tracers("config.json")
 
-    get_node_build_files_time = get_current_date_time()
-    print(f"Get node build files time:  {get_node_build_files_time}")
-    print("get the pre-built node files")
-    if hydra_eval_no1 == "None":
-        print(f"Hydra eval1 is None --> Using the tag number: {tag_no1}")
-        get_and_extract_node_files(tag_no1)
+    print(f"Getting the cardano-node and cardano-cli files using - {node_build_mode}")
+    if node_build_mode == "nix":
+        get_node_files_using_nix(node_rev1)
+    # elif node_build_mode == "prebuilt":
+    #     get_node_files_using_cicero(node_rev1)
+    # elif node_build_mode == "cabal":
+    #     get_node_files_using_cabal(node_rev1)
     else:
-        print(f"Hydra eval1 is not None --> Using the Hydra eval: {hydra_eval_no1}")
-        get_and_extract_node_files(hydra_eval_no1)
+        print("Unexpected value for the 'node_build_mode' variable")
+        print(f"  - returned: {node_build_mode} vs expected ['nix', 'cabal', 'prebuilt']")
 
     print("===================================================================================")
     print(f"====================== Start node sync test using tag_no1: {tag_no1} =============")
@@ -960,10 +966,10 @@ def main():
         print("==============================================================================")
         print(f"===================== Start sync using tag_no2: {tag_no2} ===================")
         print("==============================================================================")
-        if hydra_eval_no2 == "None":
-            get_and_extract_node_files(tag_no2)
-        else:
-            get_and_extract_node_files(hydra_eval_no2)
+        # if hydra_eval_no2 == "None":
+        #     get_and_extract_node_files(tag_no2)
+        # else:
+        #     get_and_extract_node_files(hydra_eval_no2)
 
         print(" --- node version ---")
         cli_version2, cli_git_rev2 = get_node_version()
@@ -1035,8 +1041,8 @@ def main():
     test_values_dict["total_ram_in_GB"] = get_total_ram_in_GB()
     test_values_dict["epoch_no_d_zero"] = get_epoch_no_d_zero()
     test_values_dict["start_slot_no_d_zero"] = get_start_slot_no_d_zero()
-    test_values_dict["hydra_eval_no1"] = hydra_eval_no1
-    test_values_dict["hydra_eval_no2"] = hydra_eval_no2
+    # test_values_dict["hydra_eval_no1"] = hydra_eval_no1
+    # test_values_dict["hydra_eval_no2"] = hydra_eval_no2
 
     os.chdir(Path(ROOT_TEST_PATH))
     current_directory = Path.cwd()
