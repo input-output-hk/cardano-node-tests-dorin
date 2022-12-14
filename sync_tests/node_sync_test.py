@@ -4,6 +4,7 @@ import os
 import platform
 import random
 import re
+import shlex
 import signal
 import subprocess
 import tarfile
@@ -20,6 +21,7 @@ from psutil import process_iter
 
 from explorer_utils import get_epoch_start_datetime_from_explorer
 from blockfrost_utils import get_epoch_start_datetime_from_blockfrost
+from gitpython_utils import git_clone_iohk_repo, git_checkout_branch
 
 from utils import seconds_to_time, date_diff_in_seconds, get_no_of_cpu_cores, \
     get_current_date_time, get_os_type, get_directory_size, get_total_ram_in_GB
@@ -39,30 +41,54 @@ def set_repo_paths():
     print(f"ROOT_TEST_PATH: {ROOT_TEST_PATH}")
 
 
-def git_get_commit_sha_for_tag_no(tag_no):
-    global jData
-    url = "https://api.github.com/repos/input-output-hk/cardano-node/tags"
-    response = requests.get(url)
+# def git_get_commit_sha_for_tag_no(tag_no):
+#     global jData
+#     url = "https://api.github.com/repos/input-output-hk/cardano-node/tags"
+#     response = requests.get(url)
+#
+#     # there is a rate limit for the provided url that we want to overpass with the below loop
+#     count = 0
+#     while not response.ok:
+#         time.sleep(random.randint(30, 350))
+#         count += 1
+#         response = requests.get(url)
+#         if count > 15:
+#             print(
+#                 f"!!!! ERROR: Could not get the commit sha for tag {tag_no} after {count} retries")
+#             response.raise_for_status()
+#     jData = json.loads(response.content)
+#
+#     for tag in jData:
+#         if tag.get('name') == tag_no:
+#             return tag.get('commit').get('sha')
+#
+#     print(f" ===== !!! ERROR: The specified tag_no - {tag_no} - was not found ===== ")
+#     print(json.dumps(jData, indent=4, sort_keys=True))
+#     return None
 
-    # there is a rate limit for the provided url that we want to overpass with the below loop
-    count = 0
-    while not response.ok:
-        time.sleep(random.randint(30, 350))
-        count += 1
-        response = requests.get(url)
-        if count > 15:
-            print(
-                f"!!!! ERROR: Could not get the commit sha for tag {tag_no} after {count} retries")
-            response.raise_for_status()
-    jData = json.loads(response.content)
+def execute_command(command):
+    try:
+        cmd = shlex.split(command)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
+        while process.poll() is None:
+            nextline, errors = process.communicate()
+            if errors:
+                print(f"Warnings or Errors: {errors}", flush=True)
+            print(f"{nextline}", flush=True)
+            # Poll process for new output until it is finished
+            if nextline == '' and process.poll() is not None:
+                print(f"--- End of {cmd} process", flush=True)
+                break
+        exitCode = process.returncode
+        if (exitCode != 0):
+            print(f"Command {cmd} returned exitCode: {exitCode}")
 
-    for tag in jData:
-        if tag.get('name') == tag_no:
-            return tag.get('commit').get('sha')
-
-    print(f" ===== !!! ERROR: The specified tag_no - {tag_no} - was not found ===== ")
-    print(json.dumps(jData, indent=4, sort_keys=True))
-    return None
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            "command '{}' return with error (code {}): {}".format(
+                e.cmd, e.returncode, " ".join(str(e.output).split())
+            )
+        )
 
 
 def git_get_last_closed_pr_cardano_node():
@@ -86,106 +112,106 @@ def git_get_last_closed_pr_cardano_node():
     return jData[0].get('url').split("/pulls/")[1].strip()
 
 
-def get_last_eval_no_for_node_pr(node_pr_no):
-    global eval_jData, build_jData
-    eval_url = f"https://hydra.iohk.io/jobset/Cardano/cardano-node-pr-{node_pr_no}/evals"
-
-    headers = {'Content-type': 'application/json'}
-    eval_response = requests.get(eval_url, headers=headers)
-
-    eval_jData = json.loads(eval_response.content)
-
-    if eval_response.ok:
-        eval_jData = json.loads(eval_response.content)
-    else:
-        eval_response.raise_for_status()
-    print(f'last eval_no: {eval_jData["evals"][0]["id"]}')
-    return eval_jData["evals"][0]["id"]
-
-
-def git_get_hydra_eval_link_for_commit_sha(commit_sha):
-    global jData
-    url = f"https://api.github.com/repos/input-output-hk/cardano-node/commits/{commit_sha}/status"
-    response = requests.get(url)
-
-    # there is a rate limit for the provided url that we want to overpass with the below loop
-    count = 0
-    while not response.ok:
-        time.sleep(random.randint(30, 240))
-        count += 1
-        response = requests.get(url)
-        if count > 10:
-            print(
-                f"!!!! ERROR: Could not get the hydra eval link for tag {commit_sha} after {count} retries")
-            response.raise_for_status()
-    jData = json.loads(response.content)
-
-    for status in jData.get('statuses'):
-        if "hydra.iohk.io/eval" in status.get("target_url"):
-            return status.get("target_url")
-
-    print(
-        f" ===== !!! ERROR: There is not eval link for the provided commit_sha - {commit_sha} =====")
-    print(json.dumps(jData, indent=2, sort_keys=True))
-    return None
+# def get_last_eval_no_for_node_pr(node_pr_no):
+#     global eval_jData, build_jData
+#     eval_url = f"https://hydra.iohk.io/jobset/Cardano/cardano-node-pr-{node_pr_no}/evals"
+#
+#     headers = {'Content-type': 'application/json'}
+#     eval_response = requests.get(eval_url, headers=headers)
+#
+#     eval_jData = json.loads(eval_response.content)
+#
+#     if eval_response.ok:
+#         eval_jData = json.loads(eval_response.content)
+#     else:
+#         eval_response.raise_for_status()
+#     print(f'last eval_no: {eval_jData["evals"][0]["id"]}')
+#     return eval_jData["evals"][0]["id"]
 
 
-def get_hydra_build_download_url(eval_url, os_type):
-    global eval_jData, build_jData
+# def git_get_hydra_eval_link_for_commit_sha(commit_sha):
+#     global jData
+#     url = f"https://api.github.com/repos/input-output-hk/cardano-node/commits/{commit_sha}/status"
+#     response = requests.get(url)
+#
+#     # there is a rate limit for the provided url that we want to overpass with the below loop
+#     count = 0
+#     while not response.ok:
+#         time.sleep(random.randint(30, 240))
+#         count += 1
+#         response = requests.get(url)
+#         if count > 10:
+#             print(
+#                 f"!!!! ERROR: Could not get the hydra eval link for tag {commit_sha} after {count} retries")
+#             response.raise_for_status()
+#     jData = json.loads(response.content)
+#
+#     for status in jData.get('statuses'):
+#         if "hydra.iohk.io/eval" in status.get("target_url"):
+#             return status.get("target_url")
+#
+#     print(
+#         f" ===== !!! ERROR: There is not eval link for the provided commit_sha - {commit_sha} =====")
+#     print(json.dumps(jData, indent=2, sort_keys=True))
+#     return None
 
-    expected_os_types = ["windows", "linux", "macos"]
-    if os_type not in expected_os_types:
-        raise Exception(
-            f" ===== !!! ERROR: provided os_type - {os_type} - not expected - {expected_os_types}")
 
-    headers = {'Content-type': 'application/json'}
-    eval_response = requests.get(eval_url, headers=headers)
-
-    eval_jData = json.loads(eval_response.content)
-
-    if eval_response.ok:
-        eval_jData = json.loads(eval_response.content)
-    else:
-        eval_response.raise_for_status()
-
-    for build_no in eval_jData.get("builds"):
-        build_url = f"https://hydra.iohk.io/build/{build_no}"
-        build_response = requests.get(build_url, headers=headers)
-
-        count = 0
-        while not build_response.ok:
-            time.sleep(2)
-            count += 1
-            build_response = requests.get(build_url, headers=headers)
-            if count > 9:
-                build_response.raise_for_status()
-
-        build_jData = json.loads(build_response.content)
-
-        if os_type.lower() == "windows":
-            if "cardano-node-win64" in build_jData.get("job"):
-                print(f"build_jData: {build_jData}")
-                print(f"  -- cardano_node_pr: {build_jData.get('jobset')}")
-                job_name = build_jData.get('buildproducts').get('1').get('name')
-                print(f"  -- job_name: {job_name}")
-                return f"https://hydra.iohk.io/build/{build_no}/download/1/{job_name}"
-        elif os_type.lower() == "linux":
-            if "cardano-node-linux" in build_jData.get("job"):
-                print(f"build_jData: {build_jData}")
-                print(f"  -- cardano_node_pr: {build_jData.get('jobset')}")
-                job_name = build_jData.get('buildproducts').get('1').get('name')
-                print(f"  -- job_name: {job_name}")
-                return f"https://hydra.iohk.io/build/{build_no}/download/1/{job_name}"
-        elif os_type.lower() == "macos":
-            if "cardano-node-macos" in build_jData.get("job"):
-                print(f"build_jData: {build_jData}")
-                print(f"  -- cardano_node_pr: {build_jData.get('jobset')}")
-                job_name = build_jData.get('buildproducts').get('1').get('name')
-                print(f"  -- job_name: {job_name}")
-                return f"https://hydra.iohk.io/build/{build_no}/download/1/{job_name}"
-
-    print(f" ===== !!! ERROR: No build has found for the required os_type - {os_type} - {eval_url}")
-    return None
+# def get_hydra_build_download_url(eval_url, os_type):
+#     global eval_jData, build_jData
+#
+#     expected_os_types = ["windows", "linux", "macos"]
+#     if os_type not in expected_os_types:
+#         raise Exception(
+#             f" ===== !!! ERROR: provided os_type - {os_type} - not expected - {expected_os_types}")
+#
+#     headers = {'Content-type': 'application/json'}
+#     eval_response = requests.get(eval_url, headers=headers)
+#
+#     eval_jData = json.loads(eval_response.content)
+#
+#     if eval_response.ok:
+#         eval_jData = json.loads(eval_response.content)
+#     else:
+#         eval_response.raise_for_status()
+#
+#     for build_no in eval_jData.get("builds"):
+#         build_url = f"https://hydra.iohk.io/build/{build_no}"
+#         build_response = requests.get(build_url, headers=headers)
+#
+#         count = 0
+#         while not build_response.ok:
+#             time.sleep(2)
+#             count += 1
+#             build_response = requests.get(build_url, headers=headers)
+#             if count > 9:
+#                 build_response.raise_for_status()
+#
+#         build_jData = json.loads(build_response.content)
+#
+#         if os_type.lower() == "windows":
+#             if "cardano-node-win64" in build_jData.get("job"):
+#                 print(f"build_jData: {build_jData}")
+#                 print(f"  -- cardano_node_pr: {build_jData.get('jobset')}")
+#                 job_name = build_jData.get('buildproducts').get('1').get('name')
+#                 print(f"  -- job_name: {job_name}")
+#                 return f"https://hydra.iohk.io/build/{build_no}/download/1/{job_name}"
+#         elif os_type.lower() == "linux":
+#             if "cardano-node-linux" in build_jData.get("job"):
+#                 print(f"build_jData: {build_jData}")
+#                 print(f"  -- cardano_node_pr: {build_jData.get('jobset')}")
+#                 job_name = build_jData.get('buildproducts').get('1').get('name')
+#                 print(f"  -- job_name: {job_name}")
+#                 return f"https://hydra.iohk.io/build/{build_no}/download/1/{job_name}"
+#         elif os_type.lower() == "macos":
+#             if "cardano-node-macos" in build_jData.get("job"):
+#                 print(f"build_jData: {build_jData}")
+#                 print(f"  -- cardano_node_pr: {build_jData.get('jobset')}")
+#                 job_name = build_jData.get('buildproducts').get('1').get('name')
+#                 print(f"  -- job_name: {job_name}")
+#                 return f"https://hydra.iohk.io/build/{build_no}/download/1/{job_name}"
+#
+#     print(f" ===== !!! ERROR: No build has found for the required os_type - {os_type} - {eval_url}")
+#     return None
 
 
 def check_string_format(input_string):
@@ -197,95 +223,95 @@ def check_string_format(input_string):
         return "tag_format"
 
 
-def get_and_extract_node_files(pre_built_files_identifier):
-    # sometimes we cannot identify the hydra eval no for a specific tag no ->
-    # in such case we are starting the sync tests by specifying the hydra eval no
-    # but also the tag_no (in order to add it in the database)
-    print(" - get and extract the pre-built node files")
-    current_directory = os.getcwd()
-    print(f" - current_directory for extracting node files: {current_directory}")
-    platform_system, platform_release, platform_version = get_os_type()
-
-    if check_string_format(pre_built_files_identifier) == "tag_format":
-        commit_sha = git_get_commit_sha_for_tag_no(pre_built_files_identifier)
-    elif check_string_format(pre_built_files_identifier) == "commit_sha_format":
-        commit_sha = pre_built_files_identifier
-    elif check_string_format(pre_built_files_identifier) == "eval_url":
-        commit_sha = None
-    else:
-        print(f" !!! ERROR: invalid format for tag_no - {pre_built_files_identifier}; Expected tag_no or commit_sha.")
-        commit_sha = None
-
-    if check_string_format(pre_built_files_identifier) == "eval_url":
-        eval_no = pre_built_files_identifier
-        eval_url = "https://hydra.iohk.io/eval/" + eval_no
-    else:
-        eval_url = git_get_hydra_eval_link_for_commit_sha(commit_sha)
-
-    print(f"commit_sha  : {commit_sha}")
-    print(f"eval_url    : {eval_url}")
-
-    if "linux" in platform_system.lower():
-        download_url = get_hydra_build_download_url(eval_url, "linux")
-        get_and_extract_linux_files(download_url)
-    elif "darwin" in platform_system.lower():
-        download_url = get_hydra_build_download_url(eval_url, "macos")
-        get_and_extract_macos_files(download_url)
-    elif "windows" in platform_system.lower():
-        download_url = get_hydra_build_download_url(eval_url, "windows")
-        get_and_extract_windows_files(download_url)
-
-
-def get_and_extract_linux_files(download_url):
-    current_directory = os.getcwd()
-    print(f" - current_directory: {current_directory}")
-    archive_name = download_url.split("/")[-1].strip()
-
-    print(f"archive_name: {archive_name}")
-    print(f"download_url: {download_url}")
-
-    urllib.request.urlretrieve(download_url, Path(current_directory) / archive_name)
-
-    print(f" ------ listdir (before archive extraction): {os.listdir(current_directory)}")
-    tf = tarfile.open(Path(current_directory) / archive_name)
-    tf.extractall(Path(current_directory))
-    print(f" - listdir (after archive extraction): {os.listdir(current_directory)}")
+# def get_and_extract_node_files(pre_built_files_identifier):
+#     # sometimes we cannot identify the hydra eval no for a specific tag no ->
+#     # in such case we are starting the sync tests by specifying the hydra eval no
+#     # but also the tag_no (in order to add it in the database)
+#     print(" - get and extract the pre-built node files")
+#     current_directory = os.getcwd()
+#     print(f" - current_directory for extracting node files: {current_directory}")
+#     platform_system, platform_release, platform_version = get_os_type()
+#
+#     if check_string_format(pre_built_files_identifier) == "tag_format":
+#         commit_sha = git_get_commit_sha_for_tag_no(pre_built_files_identifier)
+#     elif check_string_format(pre_built_files_identifier) == "commit_sha_format":
+#         commit_sha = pre_built_files_identifier
+#     elif check_string_format(pre_built_files_identifier) == "eval_url":
+#         commit_sha = None
+#     else:
+#         print(f" !!! ERROR: invalid format for tag_no - {pre_built_files_identifier}; Expected tag_no or commit_sha.")
+#         commit_sha = None
+#
+#     if check_string_format(pre_built_files_identifier) == "eval_url":
+#         eval_no = pre_built_files_identifier
+#         eval_url = "https://hydra.iohk.io/eval/" + eval_no
+#     else:
+#         eval_url = git_get_hydra_eval_link_for_commit_sha(commit_sha)
+#
+#     print(f"commit_sha  : {commit_sha}")
+#     print(f"eval_url    : {eval_url}")
+#
+#     if "linux" in platform_system.lower():
+#         download_url = get_hydra_build_download_url(eval_url, "linux")
+#         get_and_extract_linux_files(download_url)
+#     elif "darwin" in platform_system.lower():
+#         download_url = get_hydra_build_download_url(eval_url, "macos")
+#         get_and_extract_macos_files(download_url)
+#     elif "windows" in platform_system.lower():
+#         download_url = get_hydra_build_download_url(eval_url, "windows")
+#         get_and_extract_windows_files(download_url)
 
 
-def get_and_extract_macos_files(download_url):
-    os.chdir(Path(ROOT_TEST_PATH))
-    current_directory = os.getcwd()
-    print(f" - current_directory: {current_directory}")
-
-    archive_name = download_url.split("/")[-1].strip()
-
-    print(f"archive_name: {archive_name}")
-    print(f"download_url: {download_url}")
-
-    urllib.request.urlretrieve(download_url, Path(current_directory) / archive_name)
-
-    print(f" ------ listdir (before archive extraction): {os.listdir(current_directory)}")
-    tf = tarfile.open(Path(current_directory) / archive_name)
-    tf.extractall(Path(current_directory))
-    print(f" - listdir (after archive extraction): {os.listdir(current_directory)}")
-
-
-def get_and_extract_windows_files(download_url):
-    os.chdir(Path(ROOT_TEST_PATH))
-    current_directory = os.getcwd()
-    print(f" - current_directory: {current_directory}")
-
-    archive_name = download_url.split("/")[-1].strip()
-
-    print(f"archive_name: {archive_name}")
-    print(f"download_url: {download_url}")
-
-    urllib.request.urlretrieve(download_url, Path(current_directory) / archive_name)
-
-    print(f" ------ listdir (before archive extraction): {os.listdir(current_directory)}")
-    with zipfile.ZipFile(Path(current_directory) / archive_name, "r") as zip_ref:
-        zip_ref.extractall(current_directory)
-    print(f" ------ listdir (after archive extraction): {os.listdir(current_directory)}")
+# def get_and_extract_linux_files(download_url):
+#     current_directory = os.getcwd()
+#     print(f" - current_directory: {current_directory}")
+#     archive_name = download_url.split("/")[-1].strip()
+#
+#     print(f"archive_name: {archive_name}")
+#     print(f"download_url: {download_url}")
+#
+#     urllib.request.urlretrieve(download_url, Path(current_directory) / archive_name)
+#
+#     print(f" ------ listdir (before archive extraction): {os.listdir(current_directory)}")
+#     tf = tarfile.open(Path(current_directory) / archive_name)
+#     tf.extractall(Path(current_directory))
+#     print(f" - listdir (after archive extraction): {os.listdir(current_directory)}")
+#
+#
+# def get_and_extract_macos_files(download_url):
+#     os.chdir(Path(ROOT_TEST_PATH))
+#     current_directory = os.getcwd()
+#     print(f" - current_directory: {current_directory}")
+#
+#     archive_name = download_url.split("/")[-1].strip()
+#
+#     print(f"archive_name: {archive_name}")
+#     print(f"download_url: {download_url}")
+#
+#     urllib.request.urlretrieve(download_url, Path(current_directory) / archive_name)
+#
+#     print(f" ------ listdir (before archive extraction): {os.listdir(current_directory)}")
+#     tf = tarfile.open(Path(current_directory) / archive_name)
+#     tf.extractall(Path(current_directory))
+#     print(f" - listdir (after archive extraction): {os.listdir(current_directory)}")
+#
+#
+# def get_and_extract_windows_files(download_url):
+#     os.chdir(Path(ROOT_TEST_PATH))
+#     current_directory = os.getcwd()
+#     print(f" - current_directory: {current_directory}")
+#
+#     archive_name = download_url.split("/")[-1].strip()
+#
+#     print(f"archive_name: {archive_name}")
+#     print(f"download_url: {download_url}")
+#
+#     urllib.request.urlretrieve(download_url, Path(current_directory) / archive_name)
+#
+#     print(f" ------ listdir (before archive extraction): {os.listdir(current_directory)}")
+#     with zipfile.ZipFile(Path(current_directory) / archive_name, "r") as zip_ref:
+#         zip_ref.extractall(current_directory)
+#     print(f" ------ listdir (after archive extraction): {os.listdir(current_directory)}")
 
 
 def delete_node_files():
@@ -426,7 +452,7 @@ def get_testnet_value():
         return None
 
 
-def wait_for_node_to_start(tag_no):
+def wait_for_node_to_start():
     # when starting from clean state it might take ~30 secs for the cli to work
     # when starting from existing state it might take > 10 mins for the cli to work (opening db and
     # replaying the ledger)
@@ -446,8 +472,8 @@ def get_current_tip(timeout_minutes=10):
         try:
             output = (
                 subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-                    .decode("utf-8")
-                    .strip()
+                .decode("utf-8")
+                .strip()
             )
             output_json = json.loads(output)
 
@@ -483,8 +509,8 @@ def get_node_version():
         cmd = CLI + " --version"
         output = (
             subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-                .decode("utf-8")
-                .strip()
+            .decode("utf-8")
+            .strip()
         )
         cardano_cli_version = output.split("git rev ")[0].strip()
         cardano_cli_git_rev = output.split("git rev ")[1].strip()
@@ -497,14 +523,14 @@ def get_node_version():
         )
 
 
-def start_node_windows(env, tag_no, node_start_arguments):
+def start_node_windows(cardano_node, tag_no, node_start_arguments):
     os.chdir(Path(ROOT_TEST_PATH))
     current_directory = Path.cwd()
     start_args = ' '.join(node_start_arguments)
     if "None" in start_args:
         start_args = ""
     cmd = (
-        f"{NODE} run --topology topology.json "
+        f"{cardano_node} run --topology topology.json "
         f"--database-path db "
         f"--host-addr 0.0.0.0 "
         f"--port 3000 "
@@ -529,7 +555,7 @@ def start_node_windows(env, tag_no, node_start_arguments):
                 exit(1)
 
         print(f"DB folder was created after {count} seconds")
-        secs_to_start = wait_for_node_to_start(tag_no)
+        secs_to_start = wait_for_node_to_start()
         print(f" - listdir current_directory: {os.listdir(current_directory)}")
         print(f" - listdir db: {os.listdir(current_directory / 'db')}")
         return secs_to_start
@@ -539,7 +565,7 @@ def start_node_windows(env, tag_no, node_start_arguments):
                 e.cmd, e.returncode, ' '.join(str(e.output).split())))
 
 
-def start_node_unix(env, tag_no, node_start_arguments):
+def start_node_unix(cardano_node, tag_no, node_start_arguments):
     os.chdir(Path(ROOT_TEST_PATH))
     current_directory = Path.cwd()
     print(f"current_directory: {current_directory}")
@@ -547,7 +573,7 @@ def start_node_unix(env, tag_no, node_start_arguments):
     if "None" in start_args:
         start_args = ""
     cmd = (
-        f"{NODE} run --topology topology.json --database-path "
+        f"{cardano_node} run --topology topology.json --database-path "
         f"{Path(ROOT_TEST_PATH) / 'db'} "
         f"--host-addr 0.0.0.0 --port 3000 --config "
         f"config.json --socket-path ./db/node.socket {start_args}"
@@ -569,7 +595,7 @@ def start_node_unix(env, tag_no, node_start_arguments):
                 exit(1)
 
         print(f"DB folder was created after {count} seconds")
-        secs_to_start = wait_for_node_to_start(tag_no)
+        secs_to_start = wait_for_node_to_start()
         print(f" - listdir current_directory: {os.listdir(current_directory)}")
         print(f" - listdir db: {os.listdir(current_directory / 'db')}")
         return secs_to_start
@@ -851,36 +877,57 @@ def get_data_from_logs(log_file):
     return logs_details_dict
 
 
+def copy_node_executables(src_location, dst_location):
+    platform_system, platform_release, platform_version = get_os_type()
+    NODE = "cardano-node"
+    CLI = "cardano-cli"
+    if "windows" in platform_system.lower():
+        NODE = "cardano-node.exe"
+        CLI = "cardano-cli.exe"
+    os.replace(Path(src_location) / "cardano-node-bin" / "bin" / "cardano-node" / NODE, Path(dst_location) / NODE)
+    os.replace(Path(src_location) / "cardano-cli-bin" / "bin" / "cardano-cli" / CLI, Path(dst_location) / CLI)
+    print(f"listdir src_location: {os.listdir(src_location)}")
+    print(f"listdir build location: {os.listdir(Path(src_location) / 'cardano-node-bin' / 'bin' / 'cardano-node')}")
+    print(f"listdir dst_location: {os.listdir(dst_location)}")
+
+
 def get_node_files_using_nix(node_rev):
-    subprocess.check_call("./build_node_nix.sh %s" % (str(node_rev)), shell=True)
+    current_directory = Path.cwd()
+    print(f"current_directory: {current_directory}")
+
+    repo_name = "cardano-node"
+    repo_dir = current_directory / repo_name
+    git_clone_iohk_repo(repo_name, repo_dir)
+    os.chdir(Path(repo_dir))
+    git_checkout_branch(node_rev)
+    execute_command("nix-build -v -A cardano-node -o cardano-node-bin")
+    execute_command("nix-build -v -A cardano-cli -o cardano-cli-bin")
+    copy_node_executables(repo_dir, current_directory)
+    os.chdir(Path(current_directory))
+    print(f"listdir current_directory: {os.listdir(current_directory)}")
 
 
 def main():
-    start_test_time = get_current_date_time()
-    print(f"Start test time:            {start_test_time}")
-    global NODE
-    global CLI
-
+    global NODE, CLI
     secs_to_start1, secs_to_start2 = 0, 0
-
     set_repo_paths()
-
-    print("===================================================================================")
-    print(f"Test arguments")
-    env = vars(args)["environment"]
-    print(f"- env: {env}")
-
     set_node_socket_path_env_var()
 
+    print("===================================================================================")
+    start_test_time = get_current_date_time()
+    print(f"Test start time: {start_test_time}")
+    print("=== Test arguments")
+    env = vars(args)["environment"]
+    node_build_mode = str(vars(args)["build_mode"]).strip()
     node_rev1 = str(vars(args)["node_rev1"]).strip()
     node_rev2 = str(vars(args)["node_rev2"]).strip()
     tag_no1 = str(vars(args)["tag_no1"]).strip()
     tag_no2 = str(vars(args)["tag_no2"]).strip()
-    node_build_mode = str(vars(args)["build_mode"]).strip()
     node_topology_type1 = str(vars(args)["node_topology1"]).strip()
     node_topology_type2 = str(vars(args)["node_topology2"]).strip()
     node_start_arguments1 = vars(args)["node_start_arguments1"]
     node_start_arguments2 = vars(args)["node_start_arguments2"]
+    print(f"- env: {env}")
     print(f"- node_build_mode: {node_build_mode}")
     print(f"- tag_no1: {tag_no1}")
     print(f"- tag_no1: {tag_no2}")
@@ -894,10 +941,21 @@ def main():
     platform_system, platform_release, platform_version = get_os_type()
     print(f"- platform: {platform_system, platform_release, platform_version}")
     print("===================================================================================")
-
+    print(f"Get the cardano-node and cardano-cli files using - {node_build_mode}")
     if "windows" in platform_system.lower():
         NODE = "cardano-node.exe"
         CLI = "cardano-cli.exe"
+
+    print(f"Get the cardano-node and cardano-cli files")
+    if node_build_mode == "nix":
+        get_node_files_using_nix(node_rev1)
+    else:
+        print(f"ERROR: method not implemented yet!!! Only building with NIX is supported at this moment - {node_build_mode}")
+
+    print(" --- node version ---")
+    cli_version1, cli_git_rev1 = get_node_version()
+    print(f"  - cardano_cli_version1: {cli_version1}")
+    print(f"  - cardano_cli_git_rev1: {cli_git_rev1}")
 
     print("Getting the node configuration files")
     get_node_config_files(env)
@@ -909,40 +967,25 @@ def main():
 
     enable_cardano_node_tracers("config.json")
 
-    print(f"Getting the cardano-node and cardano-cli files using - {node_build_mode}")
-    if node_build_mode == "nix":
-        get_node_files_using_nix(node_rev1)
-    # elif node_build_mode == "prebuilt":
-    #     get_node_files_using_cicero(node_rev1)
-    # elif node_build_mode == "cabal":
-    #     get_node_files_using_cabal(node_rev1)
-    else:
-        print("Unexpected value for the 'node_build_mode' variable")
-        print(f"  - returned: {node_build_mode} vs expected ['nix', 'cabal', 'prebuilt']")
-
     print("===================================================================================")
-    print(f"====================== Start node sync test using tag_no1: {tag_no1} =============")
+    print(f"================== Start node sync test using node_rev1: {node_rev1} =============")
     print("===================================================================================")
 
-    print(" --- node version ---")
-    cli_version1, cli_git_rev1 = get_node_version()
-    print(f"  - cardano_cli_version1: {cli_version1}")
-    print(f"  - cardano_cli_git_rev1: {cli_git_rev1}")
-
-    print(f"   ======================= Start node using tag_no1: {tag_no1} ====================")
+    print(f"  =================== Start node using node_rev1: {node_rev1} ====================")
     start_sync_time1 = get_current_date_time()
     if "linux" in platform_system.lower() or "darwin" in platform_system.lower():
-        secs_to_start1 = start_node_unix(env, tag_no1, node_start_arguments1)
+        secs_to_start1 = start_node_unix(NODE, tag_no1, node_start_arguments1)
     elif "windows" in platform_system.lower():
-        secs_to_start1 = start_node_windows(env, tag_no1, node_start_arguments1)
+        secs_to_start1 = start_node_windows(NODE, tag_no1, node_start_arguments1)
 
     print(" - waiting for the node to sync")
-    sync_time_seconds1, last_slot_no1, latest_chunk_no1, era_details_dict1, epoch_details_dict1 = wait_for_node_to_sync(env)
+    sync_time_seconds1, last_slot_no1, latest_chunk_no1, era_details_dict1, epoch_details_dict1 = wait_for_node_to_sync(
+        env)
 
     end_sync_time1 = get_current_date_time()
-    print(f"secs_to_start1            : {secs_to_start1}")
-    print(f"start_sync_time1          : {start_sync_time1}")
-    print(f"end_sync_time1            : {end_sync_time1}")
+    print(f"secs_to_start1: {secs_to_start1}")
+    print(f"start_sync_time1: {start_sync_time1}")
+    print(f"end_sync_time1: {end_sync_time1}")
 
     # we are interested in the node logs only for the main sync - using tag_no1
     test_values_dict = OrderedDict()
@@ -964,34 +1007,34 @@ def main():
         delete_node_files()
 
         print("==============================================================================")
-        print(f"===================== Start sync using tag_no2: {tag_no2} ===================")
+        print(f"================= Start sync using node_rev2: {node_rev2} ===================")
         print("==============================================================================")
-        # if hydra_eval_no2 == "None":
-        #     get_and_extract_node_files(tag_no2)
-        # else:
-        #     get_and_extract_node_files(hydra_eval_no2)
+        print(f"Get the cardano-node and cardano-cli files")
+        if node_build_mode == "nix":
+            get_node_files_using_nix(node_rev2)
+        else:
+            print(f"ERROR: method not implemented yet!!! Only building with NIX is supported at this moment - {node_build_mode}")
 
         print(" --- node version ---")
         cli_version2, cli_git_rev2 = get_node_version()
         print(f"  - cardano_cli_version2: {cli_version2}")
         print(f"  - cardano_cli_git_rev2: {cli_git_rev2}")
-        print(f"   ================ Start node using tag_no2: {tag_no2} ====================")
+        print(f"   ================ Start node using node_rev2: {node_rev2} ====================")
         start_sync_time2 = get_current_date_time()
         if "linux" in platform_system.lower() or "darwin" in platform_system.lower():
             secs_to_start2 = start_node_unix(env, tag_no2, node_start_arguments2)
         elif "windows" in platform_system.lower():
             secs_to_start2 = start_node_windows(env, tag_no2, node_start_arguments2)
 
-        print(f" - waiting for the node to sync - using tag_no2: {tag_no2}")
-        sync_time_seconds2, last_slot_no2, latest_chunk_no2, era_details_dict2, epoch_details_dict2 = wait_for_node_to_sync(env)
+        print(f" - waiting for the node to sync - using node_rev2: {node_rev2}")
+        sync_time_seconds2, last_slot_no2, latest_chunk_no2, era_details_dict2, epoch_details_dict2 = wait_for_node_to_sync(
+            env)
         end_sync_time2 = get_current_date_time()
 
     chain_size = get_directory_size(Path(ROOT_TEST_PATH) / "db")
 
-    # Add the test values into the local copy of the database (to be pushed into sync tests repo)
     print("Node sync test ended; Creating the `test_values_dict` dict with the test values")
     print("++++++++++++++++++++++++++++++++++++++++++++++")
-
     for era in era_details_dict1:
         print(f"  *** {era} --> {era_details_dict1[era]}")
         test_values_dict[str(era + "_start_time")] = era_details_dict1[era]["start_time"]
@@ -1002,14 +1045,12 @@ def main():
         test_values_dict[str(era + "_sync_duration_secs")] = era_details_dict1[era][
             "sync_duration_secs"]
         test_values_dict[str(era + "_sync_speed_sps")] = era_details_dict1[era]["sync_speed_sps"]
-
     print("++++++++++++++++++++++++++++++++++++++++++++++")
     epoch_details = OrderedDict()
     for epoch in epoch_details_dict1:
         print(f"{epoch} --> {epoch_details_dict1[epoch]}")
         epoch_details[epoch] = epoch_details_dict1[epoch]["sync_duration_secs"]
     print("++++++++++++++++++++++++++++++++++++++++++++++")
-
     test_values_dict["env"] = env
     test_values_dict["tag_no1"] = tag_no1
     test_values_dict["tag_no2"] = tag_no2
@@ -1041,8 +1082,8 @@ def main():
     test_values_dict["total_ram_in_GB"] = get_total_ram_in_GB()
     test_values_dict["epoch_no_d_zero"] = get_epoch_no_d_zero()
     test_values_dict["start_slot_no_d_zero"] = get_start_slot_no_d_zero()
-    # test_values_dict["hydra_eval_no1"] = hydra_eval_no1
-    # test_values_dict["hydra_eval_no2"] = hydra_eval_no2
+    test_values_dict["hydra_eval_no1"] = hydra_eval_no1
+    test_values_dict["hydra_eval_no2"] = hydra_eval_no2
 
     os.chdir(Path(ROOT_TEST_PATH))
     current_directory = Path.cwd()
@@ -1061,8 +1102,6 @@ def main():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run Cardano Node sync test\n\n")
 
-    # TO DO
-    # to add option for anything else than a node tag - PR/branch/commit?
     parser.add_argument(
         "-b", "--build_mode", help="how to get the node files - nix, cabal, prebuilt"
     )
@@ -1071,10 +1110,12 @@ if __name__ == "__main__":
         help="the environment on which to run the sync test - shelley-qa, preview, preprod, mainnet",
     )
     parser.add_argument(
-        "-r1", "--node_rev1", help="desired cardano-node revision - cardano-node tag or branch (used for initial sync, from clean state)",
+        "-r1", "--node_rev1",
+        help="desired cardano-node revision - cardano-node tag or branch (used for initial sync, from clean state)",
     )
     parser.add_argument(
-        "-r2", "--node_rev2", help="desired cardano-node revision - cardano-node tag or branch (used for final sync, from existing state)",
+        "-r2", "--node_rev2",
+        help="desired cardano-node revision - cardano-node tag or branch (used for final sync, from existing state)",
     )
     parser.add_argument(
         "-t1", "--tag_no1", help="tag_no1 label as it will be shown in the db/visuals",
