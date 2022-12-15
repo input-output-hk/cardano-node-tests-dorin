@@ -947,10 +947,14 @@ def main():
         CLI = "cardano-cli.exe"
 
     print(f"Get the cardano-node and cardano-cli files")
+    start_build_time = get_current_date_time()
+    print(f"  - start_build_time: {start_build_time}")
     if node_build_mode == "nix":
         get_node_files_using_nix(node_rev1)
     else:
         print(f"ERROR: method not implemented yet!!! Only building with NIX is supported at this moment - {node_build_mode}")
+    end_build_time = get_current_date_time()
+    print(f"  - end_build_time: {end_build_time}")
 
     print(" --- node version ---")
     cli_version1, cli_git_rev1 = get_node_version()
@@ -958,6 +962,7 @@ def main():
     print(f"  - cardano_cli_git_rev1: {cli_git_rev1}")
 
     print("Getting the node configuration files")
+    # TO DO: add support for MAINNET P2P topology
     get_node_config_files(env)
 
     print("Enabling the desired cardano node tracers")
@@ -1082,8 +1087,8 @@ def main():
     test_values_dict["total_ram_in_GB"] = get_total_ram_in_GB()
     test_values_dict["epoch_no_d_zero"] = get_epoch_no_d_zero()
     test_values_dict["start_slot_no_d_zero"] = get_start_slot_no_d_zero()
-    test_values_dict["hydra_eval_no1"] = hydra_eval_no1
-    test_values_dict["hydra_eval_no2"] = hydra_eval_no2
+    # test_values_dict["hydra_eval_no1"] = hydra_eval_no1
+    # test_values_dict["hydra_eval_no2"] = hydra_eval_no2
 
     os.chdir(Path(ROOT_TEST_PATH))
     current_directory = Path.cwd()

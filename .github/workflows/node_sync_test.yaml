@@ -108,6 +108,7 @@ jobs:
           pip install psutil
           pip install pandas
           pip install blockfrost-python
+          pip install GitPython
       - name: run sync test
         env:
           BLOCKFROST_API_KEY: ${{ secrets.BLOCKFROST_API_KEY }}
